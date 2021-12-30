@@ -12,7 +12,7 @@
 %endmacro
     
     lidt [idt_descriptor]
-    
+     
     define_gate syscall_handler, 1
     define_gate irq0_handler, 32
     define_gate int_EOI, 33
@@ -76,6 +76,8 @@
     mov esi, message2
     int 1
     mov  dword [cursor], 340
+    
+    call set_pages
     
     jmp $ 
             
@@ -158,6 +160,46 @@ int_EOI:
     pop ax
     iretd
     
+set_pages:
+    .set_cat:
+        mov edi,PAGE_DIR_BASE_ADDRESS;базовый адрес директории
+        mov eax,PAGE_TABLES_BASE_ADDRESS;базовый адрес таблицы страниц и флаги
+        mov cx,8 ;8*4Мб=32Мб
+    .fill_cat_usef: ;опишем таблицы страниц
+        stosd
+        add eax,1000h
+        loop .fill_cat_usef
+        mov cx,1016 ;а остальное забьём нулями
+        xor eax,eax
+        rep stosd
+        mov eax,00000007h
+        mov ecx,1024*8;32Mb
+    .fill_page_table: ;теперь опишем страницы
+        stosd
+        add eax,1000h
+        loop .fill_page_table
+    ;End;         100000h
+        mov eax,PAGE_DIR_BASE_ADDRESS;1 Mb;и установим базовый адрес первого каталога в cr3
+        mov cr3,eax
+        mov eax,cr0
+        or eax,80000000h
+        mov cr0,eax
+        
+        mov esi, message1
+        mov edi, 0B8000h
+        mov ecx,message2-message1
+        rep movsb
+        
+        mov esi, message2
+        mov ecx,message3-message2
+        rep movsb
+        
+        mov esi, message3
+        mov ecx,end_messages-message3
+        rep movsb
+        
+    ret
+    
 %include "gdt.asm"
  
 align 8
@@ -173,14 +215,12 @@ idt_descriptor:
 cursor db 0
 counter db 0
 
+PAGE_DIR_BASE_ADDRESS equ 0x100000
+PAGE_TABLES_BASE_ADDRESS equ 0x101007
 USER_PM_CODE_BASE_ADDRESS equ 0x1000
 INT_GATE equ 1000111000000000b
 
-message: 
-    db "152535455565758595"
-    
-message1:
-    db "message1", 0
-    
-message2: 
-    db "message2", 0
+message1 db "152535455565758595 5 5"
+message2 db "A5d5r5F5F5050505050505 5"
+message3 db "A5d5r5E5E5050505050505 5"
+end_messages:
